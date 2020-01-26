@@ -82,8 +82,9 @@ class Chef
 
         if new_resource.templates
           new_resource.templates.each do |t|
+            t = t.ends_with?('.erb') ? File.basename(t, '.erb') : t
             template "#{app_dir}/local/#{t}" do
-              source "#{new_resource.app_name}/#{t}"
+              source "#{new_resource.app_name}/#{t}.erb"
               cookbook new_resource.cookbook
               owner splunk_runas_user
               group splunk_runas_user
