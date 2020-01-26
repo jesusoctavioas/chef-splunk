@@ -201,6 +201,8 @@ clustering in the `setup_shclustering` recipe:
 
 * `node['splunk']['shclustering']`: A hash of search head clustering configurations
   used in the `setup_shclustering` recipe
+* `node['splunk']['shclustering']['app_dir']`: the path where search head clustering configuration will
+  be installed (Default: /opt/splunk/etc/apps/0_autogen_shcluster_config)
 * `node['splunk']['shclustering']['enabled']`: Whether to enable search head clustering,
   must be set to `true` to use the `setup_shclustering` recipe. Defaults to `false`,
   must be a boolean literal `true` or `false`.

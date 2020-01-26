@@ -23,6 +23,7 @@ class Chef
       self.resource_name = 'splunk_app'
 
       # Actions correspond to splunk commands pertaining to apps.
+      actions :enable, :disable, :install, :remove
       default_action :enable
       state_attrs :enabled, :installed
 

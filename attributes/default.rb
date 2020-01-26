@@ -58,13 +58,14 @@ default['splunk']['clustering'] = {
 }
 
 default['splunk']['shclustering'] = {
+  'app_dir' => '/opt/splunk/etc/apps/0_autogen_shcluster_config',
+  'deployer_url' => '',
   'enabled' => false,
-  'mode' => 'member', # member|captain|deployer
   'label' => 'shcluster1',
+  'mgmt_uri' => "https://#{node['fqdn']}:8089",
+  'mode' => 'member', # member|captain|deployer
   'replication_factor' => 3,
   'replication_port' => 9900,
-  'deployer_url' => '',
-  'mgmt_uri' => "https://#{node['fqdn']}:8089",
   'shcluster_members' => [],
 }
 

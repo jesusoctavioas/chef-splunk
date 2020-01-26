@@ -2,6 +2,19 @@
 
 This file is used to list changes made in each version of the splunk cookbook.
 
+## 4.1.0 (TBD)
+- Adds attribute `node['splunk']['shclustering']['app_dir']` to take the place of local ruby
+  variable to set the search head clustering application directory.
+- Uses the splunk CLI to add search head cluster members instead of the app server.conf file
+  to ensure members are properly added. SH cluster members wait for the captain to converge.
+- Search Head Captains will initialize as a search head cluster member and then bootstrap themselves
+- Fixes issue [#139](https://github.com/chef-cookbooks/chef-splunk/issues/139)
+    - Add `cookbook` property to the template declared in the `splunk_app` provider
+- Fixes issue [#137](https://github.com/chef-cookbooks/chef-splunk/issues/137)
+    - Adds logic to skip any initialization or bootstrapping of search head cluster resources.
+- Fixes issue [#140](https://github.com/chef-cookbooks/chef-splunk/issues/140)
+    - Adds back resource actions: :enable, :disable, :install, :remove
+
 ## 4.0.5 (2020-01-15)
 - Adds a state file and a guard that ensures the `template[user-seed.conf]` resource is idempotent
 - Fixes the shcluster-captain bootstrap command where `--servers_list` was provided a semi-colon separated

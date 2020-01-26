@@ -3,7 +3,7 @@
 # Recipe:: setup_shclustering
 #
 # Author: Ryan LeViseur <ryanlev@gmail.com>
-# Copyright:: (c) 2014-2019, Chef Software, Inc <legal@chef.io>
+# Copyright:: (c) 2014-2020, Chef Software, Inc <legal@chef.io>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,39 +40,49 @@ passwords = chef_vault_item(node['splunk']['data_bag'], "splunk_#{node.chef_envi
 splunk_auth_info = passwords['auth']
 shcluster_secret = passwords['secret']
 
+# initialize
 # create app directories to house our server.conf with our shcluster configuration
-shcluster_app_dir = "#{splunk_dir}/etc/apps/0_autogen_shcluster_config"
-
-directory shcluster_app_dir do
+directory node['splunk']['shclustering']['app_dir'] do
   owner splunk_runas_user
   group splunk_runas_user
   mode '755'
+  only_if { node['splunk']['shclustering']['mode'] == 'deployer' }
 end
 
-directory "#{shcluster_app_dir}/local" do
+directory "#{node['splunk']['shclustering']['app_dir']}/local" do
   owner splunk_runas_user
   group splunk_runas_user
   mode '755'
+  only_if { node['splunk']['shclustering']['mode'] == 'deployer' }
 end
 
-template "#{shcluster_app_dir}/local/server.conf" do
-  source 'shclustering/server.conf.erb'
-  mode '600'
-  owner splunk_runas_user
-  group splunk_runas_user
-  variables(
-    shcluster_params: node['splunk']['shclustering'],
-    shcluster_secret: shcluster_secret
-  )
-  sensitive true
-  notifies :restart, 'service[splunk]', :immediately
+# use the internal ec2 hostname for splunk-to-splunk communications
+# this type traffic is usually free in AWS
+if node.attribute?('ec2')
+  node.default['splunk']['shclustering']['mgmt_uri'] = "https://#{node['ec2']['local_hostname']}:8089"
 end
 
-# finish here if the server is the Splunk Search Head deployer; otherwise, continue on
-return if node['splunk']['shclustering']['mode'] == 'deployer'
+if node['splunk']['shclustering']['mode'] == 'deployer'
+  template "#{node['splunk']['shclustering']['app_dir']}/local/server.conf" do
+    source 'shclustering/server.conf.erb'
+    mode '600'
+    owner splunk_runas_user
+    group splunk_runas_user
+    variables(
+      shcluster_params: node['splunk']['shclustering'],
+      shcluster_secret: shcluster_secret
+    )
+    sensitive true
+    notifies :restart, 'service[splunk]', :immediately
+  end
+end
 
-# bootstrap the shcluster and the node as a captain if shclustering mode is set to 'captain'
-shcluster_servers_list = []
+# quit early for deployers or when a search head member/captain have already been provisioned
+return if node['splunk']['shclustering']['mode'] == 'deployer' || ::File.exist?("#{splunk_dir}/etc/.setup_shcluster")
+
+#
+# everything from this point on deal only with search head cluster members and the captain
+#
 
 # search for the fqdn of the search head deployer and set that as the deployer_url
 # if one is not given in the node attributes
@@ -84,11 +94,39 @@ if node['splunk']['shclustering']['deployer_url'].empty?
     splunk_shclustering_label:#{node['splunk']['shclustering']['label']} AND \
     splunk_shclustering_mode:deployer AND \
     chef_environment:#{node.chef_environment}",
-    filter_result: { 'deployer_fqdn' => ['fqdn'] }
-  ).each do |fqdn|
-    node.default['splunk']['shclustering']['deployer_url'] = fqdn
+    filter_result: { 'deployer_mgmt_uri' => ['mgmt_uri'] }
+  ).each do |result|
+    node.default['splunk']['shclustering']['deployer_url'] = result['deployer_mgmt_uri']
   end
 end
+
+# Primary rule: all captains are members; all members must be initialized before being added to a
+# cluster.
+#
+# Secondary rule: if a captain has been setup and converged, the chef server will have its node data
+# saved and search will return a proper value for the captain. If the captain has not
+# converged, then a shcluster member should only initialize itself and wait until future
+# chef runs to add itself as a member.
+
+return if node['splunk']['shclustering']['mode'] == 'member' &&
+          (captain_ec2_local_hostname.nil? || captain_ec2_local_hostname.empty?)
+
+# initialize the member
+execute 'initialize search head cluster member' do
+  sensitive true
+  command "splunk init shcluster-config -auth '#{splunk_auth_info}' " \
+    "-mgmt_uri #{node['splunk']['shclustering']['mgmt_uri']}:#{node['splunk']['shclustering']['mgmt_port']} " \
+    "-replication_port #{node['splunk']['shclustering']['replication_port']} " \
+    "-replication_factor #{node['splunk']['shclustering']['replication_factor']} " \
+    "-conf_deploy_fetch_url #{node['splunk']['shclustering']['deployer_url']} " \
+    "-secret #{shcluster_secret} " \
+    "-shcluster_label #{node['splunk']['shclustering']['label']}"
+  only_if { node['splunk']['shclustering']['mode'] == 'member' }
+  notifies :restart, 'service[splunk]', :immediately
+end
+
+# search head cluster member list needed to bootstrap the shcluster captain
+shcluster_servers_list = []
 
 # unless shcluster members are staticly assigned via the node attribute,
 # try to find the other shcluster members via Chef search
@@ -107,16 +145,24 @@ else
   shcluster_servers_list = node['splunk']['shclustering']['shcluster_members']
 end
 
-execute 'bootstrap-shcluster' do
-  command "#{splunk_cmd} bootstrap shcluster-captain -servers_list '#{shcluster_servers_list.join(',')}' -auth '#{splunk_auth_info}'"
+execute 'bootstrap-shcluster-captain' do
   sensitive true
-  not_if { ::File.exist?("#{splunk_dir}/etc/.setup_shcluster") }
+  command "#{splunk_cmd} bootstrap shcluster-captain -auth '#{splunk_auth_info}' " \
+    "-servers_list '#{shcluster_servers_list.join(',')}'"
   only_if { node['splunk']['shclustering']['mode'] == 'captain' }
   notifies :restart, 'service[splunk]'
 end
 
+execute 'add member to search head cluster' do
+  command "splunk add shcluster-member -current_member_uri #{node['splunk']['shclustering']['mgmt_uri']} -auth '#{splunk_auth_info}'"
+  only_if { node['splunk']['shclustering']['mode'] == 'member' }
+  notifies :restart, 'service[splunk]'
+end
+
 file "#{splunk_dir}/etc/.setup_shcluster" do
-  content "true\n"
+  action :nothing
+  subscribes :touch, 'execute[bootstrap-shcluster-captain]'
+  subscribes :touch, 'execute[add member to search head cluster]'
   owner splunk_runas_user
   group splunk_runas_user
   mode '600'
