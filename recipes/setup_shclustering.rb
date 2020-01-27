@@ -108,10 +108,8 @@ end
 # converged, then a shcluster member should only initialize itself and wait until future
 # chef runs to add itself as a member.
 
-return if node['splunk']['shclustering']['mode'] == 'member' &&
-          (captain_ec2_local_hostname.nil? || captain_ec2_local_hostname.empty?)
-
-# initialize the member
+# initialize the member and then quit until the next chef run;
+# this effectively waits until the captain is ready before adding members to the cluster
 execute 'initialize search head cluster member' do
   sensitive true
   command "splunk init shcluster-config -auth '#{splunk_auth_info}' " \
@@ -124,6 +122,9 @@ execute 'initialize search head cluster member' do
   only_if { node['splunk']['shclustering']['mode'] == 'member' }
   notifies :restart, 'service[splunk]', :immediately
 end
+
+return if node['splunk']['shclustering']['mode'] == 'member' &&
+          (captain_ec2_local_hostname.nil? || captain_ec2_local_hostname.empty?)
 
 # search head cluster member list needed to bootstrap the shcluster captain
 shcluster_servers_list = []

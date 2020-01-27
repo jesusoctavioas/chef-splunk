@@ -82,7 +82,7 @@ class Chef
 
         if new_resource.templates
           new_resource.templates.each do |t|
-            t = t.end_with?('.erb') ? ::File.basename(t, '.erb') : t
+            t = t.match?(/(\.erb)*/) ? ::File.basename(t, '.erb') : t
             template "#{app_dir}/local/#{t}" do
               source "#{new_resource.app_name}/#{t}.erb"
               cookbook new_resource.cookbook
