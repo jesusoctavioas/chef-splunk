@@ -50,7 +50,7 @@ template 'user-seed.conf' do
   sensitive true
   variables user: user, password: pw
   notifies :restart, 'service[splunk]', :immediately
-  not_if { File.exist?("#{splunk_dir}/etc/system/local/.user-seed.conf") }
+  not_if { ::File.exist?("#{splunk_dir}/etc/system/local/.user-seed.conf") }
 end
 
 file '.user-seed.conf' do

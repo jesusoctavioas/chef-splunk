@@ -3,6 +3,7 @@
 # Recipe:: setup_shclustering
 #
 # Author: Ryan LeViseur <ryanlev@gmail.com>
+# Contributor: Dang H. Nguyen <dang.nguyen@disney.com>
 # Copyright:: (c) 2014-2020, Chef Software, Inc <legal@chef.io>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,9 +59,7 @@ end
 
 # use the internal ec2 hostname for splunk-to-splunk communications
 # this type traffic is usually free in AWS
-if node.attribute?('ec2')
-  node.default['splunk']['shclustering']['mgmt_uri'] = "https://#{node['ec2']['local_hostname']}:8089"
-end
+node.force_default['splunk']['shclustering']['mgmt_uri'] = "https://#{node['ec2']['local_hostname']}:8089" if node.attribute?('ec2')
 
 if node['splunk']['shclustering']['mode'] == 'deployer'
   template "#{node['splunk']['shclustering']['app_dir']}/local/server.conf" do
@@ -94,7 +93,7 @@ if node['splunk']['shclustering']['deployer_url'].empty?
     splunk_shclustering_label:#{node['splunk']['shclustering']['label']} AND \
     splunk_shclustering_mode:deployer AND \
     chef_environment:#{node.chef_environment}",
-    filter_result: { 'deployer_mgmt_uri' => ['mgmt_uri'] }
+    filter_result: { 'deployer_mgmt_uri' => %w(splunk shclustering mgmt_uri) }
   ).each do |result|
     node.default['splunk']['shclustering']['deployer_url'] = result['deployer_mgmt_uri']
   end
@@ -108,62 +107,81 @@ end
 # converged, then a shcluster member should only initialize itself and wait until future
 # chef runs to add itself as a member.
 
-# initialize the member and then quit until the next chef run;
-# this effectively waits until the captain is ready before adding members to the cluster
-execute 'initialize search head cluster member' do
-  sensitive true
-  command "splunk init shcluster-config -auth '#{splunk_auth_info}' " \
-    "-mgmt_uri #{node['splunk']['shclustering']['mgmt_uri']}:#{node['splunk']['shclustering']['mgmt_port']} " \
-    "-replication_port #{node['splunk']['shclustering']['replication_port']} " \
-    "-replication_factor #{node['splunk']['shclustering']['replication_factor']} " \
-    "-conf_deploy_fetch_url #{node['splunk']['shclustering']['deployer_url']} " \
-    "-secret #{shcluster_secret} " \
-    "-shcluster_label #{node['splunk']['shclustering']['label']}"
-  only_if { node['splunk']['shclustering']['mode'] == 'member' }
-  notifies :restart, 'service[splunk]', :immediately
-end
-
-return if node['splunk']['shclustering']['mode'] == 'member' &&
-          (captain_ec2_local_hostname.nil? || captain_ec2_local_hostname.empty?)
-
 # search head cluster member list needed to bootstrap the shcluster captain
-shcluster_servers_list = []
+shcluster_servers_list = [node['splunk']['shclustering']['mgmt_uri']]
 
 # unless shcluster members are staticly assigned via the node attribute,
 # try to find the other shcluster members via Chef search
-if node['splunk']['shclustering']['mode'] == 'captain' &&
-   node['splunk']['shclustering']['shcluster_members'].empty?
+# if node['splunk']['shclustering']['mode'] == 'captain' &&
+if node['splunk']['shclustering']['shcluster_members'].empty?
   search(
     :node,
     "\
     splunk_shclustering_enabled:true AND \
     splunk_shclustering_label:#{node['splunk']['shclustering']['label']} AND \
-    chef_environment:#{node.chef_environment}"
+    splunk_shclustering_mode:member AND \
+    chef_environment:#{node.chef_environment}",
+    filter_result: { 'member_mgmt_uri' => %w(splunk shclustering mgmt_uri) }
   ).each do |result|
-    shcluster_servers_list << result['splunk']['shclustering']['mgmt_uri']
+    shcluster_servers_list << result['member_mgmt_uri']
   end
 else
   shcluster_servers_list = node['splunk']['shclustering']['shcluster_members']
 end
 
-execute 'bootstrap-shcluster-captain' do
-  sensitive true
-  command "#{splunk_cmd} bootstrap shcluster-captain -auth '#{splunk_auth_info}' " \
-    "-servers_list '#{shcluster_servers_list.join(',')}'"
-  only_if { node['splunk']['shclustering']['mode'] == 'captain' }
-  notifies :restart, 'service[splunk]'
+if shcluster_servers_list.size < 3
+  log 'A minimum of three search head cluster members are required for distributed search. Nothing to do this time.' do
+    level :warn
+  end
+  return
 end
 
-execute 'add member to search head cluster' do
-  command "splunk add shcluster-member -current_member_uri #{node['splunk']['shclustering']['mgmt_uri']} -auth '#{splunk_auth_info}'"
-  only_if { node['splunk']['shclustering']['mode'] == 'member' }
-  notifies :restart, 'service[splunk]'
+# initialize the member and then quit until the next chef run;
+# this effectively waits until the captain is ready before adding members to the cluster
+execute 'initialize search head cluster member' do
+  sensitive true
+  command "#{splunk_cmd} init shcluster-config -auth '#{splunk_auth_info}' " \
+    "-mgmt_uri #{node['splunk']['shclustering']['mgmt_uri']} " \
+    "-replication_port #{node['splunk']['shclustering']['replication_port']} " \
+    "-replication_factor #{node['splunk']['shclustering']['replication_factor']} " \
+    "-conf_deploy_fetch_url #{node['splunk']['shclustering']['deployer_url']} " \
+    "-secret #{shcluster_secret} " \
+    "-shcluster_label #{node['splunk']['shclustering']['label']}"
+  notifies :restart, 'service[splunk]', :immediately
+end
+
+if shcluster_servers_list.size >= 2 && node['splunk']['shclustering']['mode'] == 'captain'
+  execute 'bootstrap-shcluster-captain' do
+    sensitive true
+    command "#{splunk_cmd} bootstrap shcluster-captain -auth '#{splunk_auth_info}' " \
+      "-servers_list \"#{shcluster_servers_list.join(',')}\""
+    notifies :restart, 'service[splunk]', :immediately
+  end
+  # TODO: run command to switch to dynamic captain
+else
+  captain_mgmt_uri = nil
+  search(
+    :node,
+    "\
+    splunk_shclustering_enabled:true AND \
+    splunk_shclustering_label:#{node['splunk']['shclustering']['label']} AND \
+    splunk_shclustering_mode:captain AND \
+    chef_environment:#{node.chef_environment}",
+    filter_result: { 'captain_mgmt_uri' => %w(splunk shclustering mgmt_uri) }
+  ).each { |result| captain_mgmt_uri = result['captain_mgmt_uri'] }
+
+  execute 'add member to search head cluster' do
+    command "#{splunk_cmd} add shcluster-member -current_member_uri #{captain_mgmt_uri} -auth '#{splunk_auth_info}'"
+    only_if { node['splunk']['shclustering']['mode'] == 'member' }
+    notifies :restart, 'service[splunk]'
+  end
 end
 
 file "#{splunk_dir}/etc/.setup_shcluster" do
   action :nothing
-  subscribes :touch, 'execute[bootstrap-shcluster-captain]'
-  subscribes :touch, 'execute[add member to search head cluster]'
+  content "#{node['splunk']['shclustering']['mode']}\n#{shcluster_servers_list.join(',')}\n"
+  subscribes :create, 'execute[bootstrap-shcluster-captain]'
+  subscribes :create, 'execute[add member to search head cluster]'
   owner splunk_runas_user
   group splunk_runas_user
   mode '600'
