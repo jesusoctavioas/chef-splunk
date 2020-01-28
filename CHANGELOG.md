@@ -15,6 +15,8 @@ This file is used to list changes made in each version of the splunk cookbook.
 - Fixes issue [#140](https://github.com/chef-cookbooks/chef-splunk/issues/140)
     - Adds back resource actions: :enable, :disable, :install, :remove
 - Integrates a search head cluster to a single or multisite indexer cluster
+- adds helper method `#add_shcluster_member?` to indicate whether a search head cluster member needs to
+  be added to the search head cluster
 
 ## 4.0.5 (2020-01-15)
 - Adds a state file and a guard that ensures the `template[user-seed.conf]` resource is idempotent

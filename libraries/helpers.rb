@@ -123,6 +123,12 @@ def disabled?
     node['splunk']['disabled'] == true
 end
 
+def add_shcluster_member?(splunk_auth_info)
+  list_member_info = Mixlib::ShellOut.new("#{splunk_cmd} list shcluster-member-info -auth #{splunk_auth_info}")
+  list_member_info.run_command
+  list_member_info.error?
+end
+
 def setup_auth?
   node['splunk']['setup_auth'] == true
 end

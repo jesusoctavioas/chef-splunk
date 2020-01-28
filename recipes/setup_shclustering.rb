@@ -148,6 +148,7 @@ execute 'initialize search head cluster member' do
     "-secret #{shcluster_secret} " \
     "-shcluster_label #{node['splunk']['shclustering']['label']}"
   notifies :restart, 'service[splunk]', :immediately
+  only_if { add_shcluster_member?(splunk_auth_info) }
 end
 
 if shcluster_servers_list.size >= 2 && node['splunk']['shclustering']['mode'] == 'captain'
@@ -172,7 +173,7 @@ else
   execute 'add member to search head cluster' do
     sensitive true
     command "#{splunk_cmd} add shcluster-member -current_member_uri #{captain_mgmt_uri} -auth '#{splunk_auth_info}'"
-    only_if { node['splunk']['shclustering']['mode'] == 'member' }
+    only_if { node['splunk']['shclustering']['mode'] == 'member'  && add_shcluster_member?(splunk_auth_info) }
     notifies :restart, 'service[splunk]'
   end
 end
@@ -185,6 +186,7 @@ file "#{splunk_dir}/etc/.setup_shcluster" do
   owner splunk_runas_user
   group splunk_runas_user
   mode '600'
+  not_if { add_shcluster_member?(splunk_auth_info) }
 end
 
 cluster_master = { 'mgmt_uri' => nil, 'num_sites' => 1, 'site' => nil }
