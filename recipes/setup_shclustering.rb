@@ -157,7 +157,6 @@ if shcluster_servers_list.size >= 2 && node['splunk']['shclustering']['mode'] ==
       "-servers_list \"#{shcluster_servers_list.join(',')}\""
     notifies :restart, 'service[splunk]', :immediately
   end
-  # TODO: run command to switch to dynamic captain
 else
   captain_mgmt_uri = nil
   search(
@@ -186,4 +185,31 @@ file "#{splunk_dir}/etc/.setup_shcluster" do
   owner splunk_runas_user
   group splunk_runas_user
   mode '600'
+end
+
+cluster_master = { 'mgmt_uri' => nil, 'num_sites' => 1, 'site' => nil }
+search(
+  :node,
+  "\
+  splunk_clustering_enabled:true AND \
+  splunk_clustering_mode:master AND \
+  chef_environment:#{node.chef_environment}",
+  filter_result: {
+    'cluster_master_mgmt_uri' => %w(splunk clustering mgmt_uri),
+    'cluster_master_site' => %w(splunk clustering site),
+    'cluster_num_sites' => %w(splunk clustering num_sites)
+  }
+).each do |result|
+  cluster_master['mgmt_uri'] = result['cluster_master_mgmt_uri']
+  cluster_master['site'] = result['cluster_master_site']
+  cluster_master['num_sites'] = result['cluster_num_sites']
+end
+
+shpeer_integration_command = "#{splunk_cmd} edit cluster-config -mode searchhead -master_uri #{cluster_master['mgmt_uri']} " \
+                             "-secret #{shcluster_secret}"
+shpeer_integration_command += " -site #{cluster_master['site']}" if cluster_master['num_sites'] > 1
+
+execute 'search head cluster integration with indexer cluster' do
+  sensitive true
+  command shpeer_integration_command
 end
