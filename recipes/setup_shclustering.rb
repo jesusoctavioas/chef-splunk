@@ -197,7 +197,7 @@ search(
   splunk_clustering_mode:master AND \
   chef_environment:#{node.chef_environment}",
   filter_result: {
-    'cluster_master_mgmt_uri' => %w(splunk clustering mgmt_uri),
+    'cluster_master_mgmt_uri' => %w(splunk shclustering mgmt_uri),
     'cluster_master_site' => %w(splunk clustering site),
     'cluster_num_sites' => %w(splunk clustering num_sites)
   }
