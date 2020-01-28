@@ -171,6 +171,7 @@ else
   ).each { |result| captain_mgmt_uri = result['captain_mgmt_uri'] }
 
   execute 'add member to search head cluster' do
+    sensitive true
     command "#{splunk_cmd} add shcluster-member -current_member_uri #{captain_mgmt_uri} -auth '#{splunk_auth_info}'"
     only_if { node['splunk']['shclustering']['mode'] == 'member' }
     notifies :restart, 'service[splunk]'
