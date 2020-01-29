@@ -27,50 +27,53 @@ class Chef
       provides :splunk_app
 
       action :install do
+        log "#{new_resource.app_name} is installed" do
+          level :debug
+          only_if app_installed?
+        end
+
         splunk_service
         install_dependencies unless new_resource.app_dependencies.empty?
-        unless app_installed?
-          if new_resource.cookbook_file
-            app_package = local_file(new_resource.cookbook_file)
-            cookbook_file app_package do
-              source new_resource.cookbook_file
-              cookbook new_resource.cookbook
-              checksum new_resource.checksum
-              owner splunk_runas_user
-              group splunk_runas_user
-              notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
-            end
-          elsif new_resource.remote_file
-            app_package = local_file(new_resource.remote_file)
-            remote_file app_package do
-              source new_resource.remote_file
-              checksum new_resource.checksum
-              owner splunk_runas_user
-              group splunk_runas_user
-              notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
-            end
-          elsif new_resource.remote_directory
-            app_package = app_dir
-            remote_directory app_dir do
-              source new_resource.remote_directory
-              cookbook new_resource.cookbook
-              owner splunk_runas_user
-              group splunk_runas_user
-              files_owner splunk_runas_user
-              files_group splunk_runas_user
-              notifies :restart, 'service[splunk]', :immediately
-            end
-          else
-            raise "Could not find an installation source for splunk_app[#{new_resource.app_name}]"
+        if new_resource.cookbook_file
+          app_package = local_file(new_resource.cookbook_file)
+          cookbook_file app_package do
+            source new_resource.cookbook_file
+            cookbook new_resource.cookbook
+            checksum new_resource.checksum
+            owner splunk_runas_user
+            group splunk_runas_user
+            notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
+            not_if { app_installed? }
           end
-
-          dir = app_dir
-
-          execute "splunk-install-#{new_resource.app_name}" do
-            sensitive true
-            command "#{splunk_cmd} install app #{app_package} -auth #{splunk_auth(new_resource.splunk_auth)}"
-            not_if { ::File.exist?("#{dir}/default/app.conf") }
+        elsif new_resource.remote_file
+          app_package = local_file(new_resource.remote_file)
+          remote_file app_package do
+            source new_resource.remote_file
+            checksum new_resource.checksum
+            owner splunk_runas_user
+            group splunk_runas_user
+            notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
+            not_if { app_installed? }
           end
+        elsif new_resource.remote_directory
+          remote_directory app_dir do
+            source new_resource.remote_directory
+            cookbook new_resource.cookbook
+            owner splunk_runas_user
+            group splunk_runas_user
+            files_owner splunk_runas_user
+            files_group splunk_runas_user
+            notifies :restart, 'service[splunk]'
+          end
+        else
+          raise "Could not find an installation source for splunk_app[#{new_resource.app_name}]"
+        end
+
+        execute "splunk-install-#{new_resource.app_name}" do
+          sensitive true
+          command "#{splunk_cmd} install app #{app_package} -auth #{splunk_auth(new_resource.splunk_auth)}"
+          notifies :write, "log[#{new_resource.app_name} is installed]", :immediately
+          not_if { app_installed? }
         end
 
         directory "#{app_dir}/local" do
@@ -80,7 +83,22 @@ class Chef
           group splunk_runas_user
         end
 
-        if new_resource.templates
+        case new_resource.templates.class
+        when Hash
+          # create the templates with destination paths relative to the target app_dir
+          # Hash should be key/value where the key indicates a destination path (including file name),
+          # and value is the name of the template source
+          new_resource.templates.each do |destination, source|
+            template "#{app_dir}/#{destination}" do
+              source source
+              cookbook new_resource.cookbook
+              owner splunk_runas_user
+              group splunk_runas_user
+              mode '644'
+              notifies :restart, 'service[splunk]'
+            end
+          end
+        when Array
           new_resource.templates.each do |t|
             t = t.match?(/(\.erb)*/) ? ::File.basename(t, '.erb') : t
             template "#{app_dir}/local/#{t}" do
@@ -100,32 +118,32 @@ class Chef
         directory app_dir do
           action :delete
           recursive true
-          owner splunk_runas_user
-          group splunk_runas_user
           notifies :restart, 'service[splunk]'
         end
       end
 
       action :enable do
-        unless app_enabled?
-          splunk_service
-          execute "splunk-enable-#{new_resource.app_name}" do
-            sensitive true
-            command "#{splunk_cmd} enable app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}"
-            notifies :restart, 'service[splunk]'
-          end
+        log "#{new_resource.app_name} is enabled" do
+          level :info
+          only_if app_enabled?
+        end
+        splunk_service
+        execute "splunk-enable-#{new_resource.app_name}" do
+          sensitive true
+          command "#{splunk_cmd} enable app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}"
+          notifies :restart, 'service[splunk]'
+          not_if { app_enabled? }
         end
       end
 
       action :disable do
-        if app_enabled?
-          splunk_service
-          execute "splunk-disable-#{new_resource.app_name}" do
-            sensitive true
-            command "#{splunk_cmd} disable app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}"
-            not_if { ::File.exist?("#{splunk_dir}/etc/disabled-apps/#{new_resource.app_name}") }
-            notifies :restart, 'service[splunk]'
-          end
+        return unless app_enabled?
+        splunk_service
+        execute "splunk-disable-#{new_resource.app_name}" do
+          sensitive true
+          command "#{splunk_cmd} disable app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}"
+          not_if { ::File.exist?("#{splunk_dir}/etc/disabled-apps/#{new_resource.app_name}") }
+          notifies :restart, 'service[splunk]'
         end
       end
 
@@ -140,6 +158,7 @@ class Chef
       end
 
       def app_enabled?
+        return true unless ::File.exist?("#{splunk_dir}/etc/disabled-apps/#{new_resource.app_name}")
         s = shell_out("#{splunk_cmd} display app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}")
         s.run_command
         if s.stdout.empty?
