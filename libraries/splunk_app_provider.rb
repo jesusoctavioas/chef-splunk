@@ -1,6 +1,7 @@
 #
 # Author: Joshua Timberman <joshua@chef.io>
-# Copyright:: 2014-2019, Chef Software, Inc <legal@chef.io>
+# Contributor: Dang H. Nguyen <dang.nguyen@disney.com>
+# Copyright:: 2014-2020, Chef Software, Inc <legal@chef.io>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,7 +71,7 @@ class Chef
         end
 
         execute "splunk-install-#{new_resource.app_name}" do
-          sensitive true
+          sensitive false
           command "#{splunk_cmd} install app #{app_package} -auth #{splunk_auth(new_resource.splunk_auth)}"
           notifies :write, "log[#{new_resource.app_name} is installed]", :immediately
           not_if { app_installed? }
@@ -129,7 +130,7 @@ class Chef
         end
         splunk_service
         execute "splunk-enable-#{new_resource.app_name}" do
-          sensitive true
+          sensitive false
           command "#{splunk_cmd} enable app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}"
           notifies :restart, 'service[splunk]'
           not_if { app_enabled? }
@@ -140,7 +141,7 @@ class Chef
         return unless app_enabled?
         splunk_service
         execute "splunk-disable-#{new_resource.app_name}" do
-          sensitive true
+          sensitive false
           command "#{splunk_cmd} disable app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}"
           not_if { ::File.exist?("#{splunk_dir}/etc/disabled-apps/#{new_resource.app_name}") }
           notifies :restart, 'service[splunk]'
