@@ -30,7 +30,7 @@ class Chef
       action :install do
         log "#{new_resource.app_name} is installed" do
           level :debug
-          only_if app_installed?
+          only_if { app_installed? }
         end
 
         splunk_service
