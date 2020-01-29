@@ -70,7 +70,7 @@ class Chef
 
         execute "splunk-install-#{new_resource.app_name}" do
           sensitive false
-          command "#{splunk_cmd} install app #{app_package} -auth #{splunk_auth(new_resource.splunk_auth)}"
+          command "#{splunk_cmd} install app #{app_dir} -auth #{splunk_auth(new_resource.splunk_auth)}"
         end
 
         directory "#{app_dir}/local" do
