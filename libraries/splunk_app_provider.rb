@@ -29,7 +29,7 @@ class Chef
 
       action :install do
         dir = app_dir # this grants chef resources access to the private `#app_dir`
-        
+
         if app_installed?
          ::Chef::Log.debug "#{new_resource.app_name} is installed"
          return
@@ -126,6 +126,7 @@ class Chef
       action :enable do
         if app_enabled?
           ::Chef::Log.debug "#{new_resource.app_name} is enabled"
+          return
         end
 
         splunk_service
