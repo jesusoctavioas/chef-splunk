@@ -82,8 +82,7 @@ class Chef
           group splunk_runas_user
         end
 
-        case new_resource.templates.class
-        when Hash
+        if new_resource.templates.class == Hash
           # create the templates with destination paths relative to the target app_dir
           # Hash should be key/value where the key indicates a destination path (including file name),
           # and value is the name of the template source
@@ -97,7 +96,7 @@ class Chef
               notifies :restart, 'service[splunk]'
             end
           end
-        when Array
+        else
           new_resource.templates.each do |t|
             t = t.match?(/(\.erb)*/) ? ::File.basename(t, '.erb') : t
             template "#{dir}/local/#{t}" do
