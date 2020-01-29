@@ -28,10 +28,10 @@ class Chef
       provides :splunk_app
 
       action :install do
-        log "#{new_resource.app_name} is installed" do
-          level :debug
-          only_if { app_installed? }
-        end
+        if app_installed?
+         ::Chef::Log.debug "#{new_resource.app_name} is installed"
+         return
+       end
 
         splunk_service
         install_dependencies unless new_resource.app_dependencies.empty?
@@ -44,7 +44,6 @@ class Chef
             owner splunk_runas_user
             group splunk_runas_user
             notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
-            not_if { app_installed? }
           end
         elsif new_resource.remote_file
           app_package = local_file(new_resource.remote_file)
@@ -54,7 +53,6 @@ class Chef
             owner splunk_runas_user
             group splunk_runas_user
             notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
-            not_if { app_installed? }
           end
         elsif new_resource.remote_directory
           remote_directory app_dir do
@@ -73,8 +71,6 @@ class Chef
         execute "splunk-install-#{new_resource.app_name}" do
           sensitive false
           command "#{splunk_cmd} install app #{app_package} -auth #{splunk_auth(new_resource.splunk_auth)}"
-          notifies :write, "log[#{new_resource.app_name} is installed]", :immediately
-          not_if { app_installed? }
         end
 
         directory "#{app_dir}/local" do
@@ -124,16 +120,15 @@ class Chef
       end
 
       action :enable do
-        log "#{new_resource.app_name} is enabled" do
-          level :info
-          only_if app_enabled?
+        if app_enabled?
+          ::Chef::Log.debug "#{new_resource.app_name} is enabled"
         end
+
         splunk_service
         execute "splunk-enable-#{new_resource.app_name}" do
           sensitive false
           command "#{splunk_cmd} enable app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}"
           notifies :restart, 'service[splunk]'
-          not_if { app_enabled? }
         end
       end
 
