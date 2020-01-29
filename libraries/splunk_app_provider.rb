@@ -132,7 +132,7 @@ class Chef
       private
 
       def app_dir
-        "#{splunk_dir}/etc/apps/#{new_resource.app_name}"
+        new_resource.app_dir || "#{splunk_dir}/etc/apps/#{new_resource.app_name}"
       end
 
       def local_file(source)
@@ -150,7 +150,7 @@ class Chef
       end
 
       def app_installed?
-        ::File.exist?("#{app_dir}/default/app.conf")
+        ::File.exist?("#{app_dir}/default/app.conf") || ::File.exist?("#{app_dir}/local/app.conf")
       end
 
       def splunk_service

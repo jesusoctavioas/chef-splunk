@@ -151,3 +151,17 @@ def correct_runas_user?
   splunk.run_command
   splunk_runas_user == splunk.stdout
 end
+
+def multisite_clustering?
+  node['splunk']['clustering']['num_sites'] > 1
+end
+
+def cluster_master?
+  node['splunk']['clustering']['mode'] == 'master'
+end
+
+def search_heads_peered?(splunk_auth_info)
+  list_search_server = Mixlib::ShellOut.new("/opt/splunk/bin/splunk list search-server -auth #{splunk_auth_info}")
+  list_search_server.run_command
+  list_search_server.stdout.match?(/(^Server at URI \".*\" with status as \"Up\")+/)
+end

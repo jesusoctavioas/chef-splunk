@@ -28,6 +28,7 @@ class Chef
       state_attrs :enabled, :installed
 
       attribute :app_name, kind_of: String, name_attribute: true
+      attribute :app_dir, kind_of: String, default: nil
       attribute :remote_file, kind_of: String, default: nil
       attribute :cookbook_file, kind_of: String, default: nil
       attribute :cookbook, kind_of: String, default: nil
