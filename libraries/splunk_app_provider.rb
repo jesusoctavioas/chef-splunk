@@ -28,6 +28,8 @@ class Chef
       provides :splunk_app
 
       action :install do
+        dir = app_dir # this grants chef resources access to the private `#app_dir`
+        
         if app_installed?
          ::Chef::Log.debug "#{new_resource.app_name} is installed"
          return
@@ -55,7 +57,7 @@ class Chef
             notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
           end
         elsif new_resource.remote_directory
-          remote_directory app_dir do
+          remote_directory dir do
             source new_resource.remote_directory
             cookbook new_resource.cookbook
             owner splunk_runas_user
@@ -70,10 +72,10 @@ class Chef
 
         execute "splunk-install-#{new_resource.app_name}" do
           sensitive false
-          command "#{splunk_cmd} install app #{app_dir} -auth #{splunk_auth(new_resource.splunk_auth)}"
+          command "#{splunk_cmd} install app #{dir} -auth #{splunk_auth(new_resource.splunk_auth)}"
         end
 
-        directory "#{app_dir}/local" do
+        directory "#{dir}/local" do
           recursive true
           mode '755'
           owner splunk_runas_user
@@ -86,7 +88,7 @@ class Chef
           # Hash should be key/value where the key indicates a destination path (including file name),
           # and value is the name of the template source
           new_resource.templates.each do |destination, source|
-            template "#{app_dir}/#{destination}" do
+            template "#{dir}/#{destination}" do
               source source
               cookbook new_resource.cookbook
               owner splunk_runas_user
@@ -98,7 +100,7 @@ class Chef
         when Array
           new_resource.templates.each do |t|
             t = t.match?(/(\.erb)*/) ? ::File.basename(t, '.erb') : t
-            template "#{app_dir}/local/#{t}" do
+            template "#{dir}/local/#{t}" do
               source "#{new_resource.app_name}/#{t}.erb"
               cookbook new_resource.cookbook
               owner splunk_runas_user
@@ -111,8 +113,10 @@ class Chef
       end
 
       action :remove do
+        dir = app_dir # this grants chef resources access to the private `#app_dir`
+
         splunk_service
-        directory app_dir do
+        directory dir do
           action :delete
           recursive true
           notifies :restart, 'service[splunk]'
