@@ -77,7 +77,7 @@ if node['splunk']['shclustering']['mode'] == 'deployer'
 end
 
 # quit early for deployers or when a search head member/captain have already been provisioned
-return if node['splunk']['shclustering']['mode'] == 'deployer' || ::File.exist?("#{splunk_dir}/etc/.setup_shcluster")
+return if node['splunk']['shclustering']['mode'] == 'deployer'
 
 #
 # everything from this point on deal only with search head cluster members and the captain
@@ -149,6 +149,7 @@ execute 'initialize search head cluster member' do
     "-shcluster_label #{node['splunk']['shclustering']['label']}"
   notifies :restart, 'service[splunk]', :immediately
   only_if { add_shcluster_member?(splunk_auth_info) }
+  not_if { ::File.exist?("#{splunk_dir}/etc/.setup_shcluster") }
 end
 
 if shcluster_servers_list.size >= 2 && node['splunk']['shclustering']['mode'] == 'captain'
@@ -157,8 +158,9 @@ if shcluster_servers_list.size >= 2 && node['splunk']['shclustering']['mode'] ==
     command "#{splunk_cmd} bootstrap shcluster-captain -auth '#{splunk_auth_info}' " \
       "-servers_list \"#{shcluster_servers_list.join(',')}\""
     notifies :restart, 'service[splunk]', :immediately
+    not_if { ::File.exist?("#{splunk_dir}/etc/.setup_shcluster") }
   end
-else
+elsif !::File.exist?("#{splunk_dir}/etc/.setup_shcluster")
   captain_mgmt_uri = nil
   search(
     :node,
@@ -173,7 +175,8 @@ else
   execute 'add member to search head cluster' do
     sensitive true
     command "#{splunk_cmd} add shcluster-member -current_member_uri #{captain_mgmt_uri} -auth '#{splunk_auth_info}'"
-    only_if { node['splunk']['shclustering']['mode'] == 'member'  && add_shcluster_member?(splunk_auth_info) }
+    only_if { node['splunk']['shclustering']['mode'] == 'member' && add_shcluster_member?(splunk_auth_info) }
+    not_if { ::File.exist?("#{splunk_dir}/etc/.setup_shcluster") }
     notifies :restart, 'service[splunk]'
   end
 end
@@ -199,7 +202,7 @@ search(
   filter_result: {
     'cluster_master_mgmt_uri' => %w(splunk shclustering mgmt_uri),
     'cluster_master_site' => %w(splunk clustering site),
-    'cluster_num_sites' => %w(splunk clustering num_sites)
+    'cluster_num_sites' => %w(splunk clustering num_sites),
   }
 ).each do |result|
   cluster_master['mgmt_uri'] = result['cluster_master_mgmt_uri']
@@ -207,11 +210,13 @@ search(
   cluster_master['num_sites'] = result['cluster_num_sites']
 end
 
-shpeer_integration_command = "#{splunk_cmd} edit cluster-config -mode searchhead -master_uri #{cluster_master['mgmt_uri']} " \
+shpeer_integration_command = "#{splunk_cmd} edit cluster-config -mode searchhead -site site0 -master_uri #{cluster_master['mgmt_uri']} " \
                              "-secret #{shcluster_secret}"
 shpeer_integration_command += " -site #{cluster_master['site']}" if cluster_master['num_sites'] > 1
 
 execute 'search head cluster integration with indexer cluster' do
   sensitive true
   command shpeer_integration_command
+  notifies :restart, 'service[splunk]'
+  not_if { search_heads_peered?(splunk_auth_info) }
 end

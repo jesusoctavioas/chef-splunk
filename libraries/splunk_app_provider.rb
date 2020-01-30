@@ -31,9 +31,9 @@ class Chef
         dir = app_dir # this grants chef resources access to the private `#app_dir`
 
         if app_installed?
-         ::Chef::Log.debug "#{new_resource.app_name} is installed"
-         return
-       end
+          ::Chef::Log.debug "#{new_resource.app_name} is installed"
+          return
+        end
 
         splunk_service
         install_dependencies unless new_resource.app_dependencies.empty?
@@ -158,18 +158,15 @@ class Chef
       end
 
       def app_enabled?
-        return true unless ::File.exist?("#{splunk_dir}/etc/disabled-apps/#{new_resource.app_name}")
         s = shell_out("#{splunk_cmd} display app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}")
         s.run_command
-        if s.stdout.empty?
-          false
-        else
-          s.stdout.split[2] == 'ENABLED'
-        end
+        s.exitstatus == 0 && s.stdout.split[2] == 'ENABLED'
       end
 
       def app_installed?
-        ::File.exist?("#{app_dir}/default/app.conf") || ::File.exist?("#{app_dir}/local/app.conf")
+        s = shell_out("#{splunk_cmd} display app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}")
+        s.run_command
+        s.exitstatus == 0 && s.stdout.match?(/^#{new_resource.app_name}/)
       end
 
       def splunk_service
