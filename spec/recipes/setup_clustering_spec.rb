@@ -133,16 +133,12 @@ describe 'chef-splunk::setup_clustering' do
       end
 
       context 'multisite clustering with default settings' do
-        before(:each) do
-          chef_run_init.node.force_default['splunk']['clustering']['num_sites'] = 2
-          chef_run_init.node.force_default['splunk']['clustering']['site'] = 'site2'
-        end
-
         let(:chef_run) do
+          chef_run_init.node.force_default['splunk']['clustering']['num_sites'] = 2
           chef_run_init.converge(described_recipe)
         end
 
-        it_performs 'a successful run', '-mode searchhead -site site2 -master_uri https://192.168.0.10:8089 -replication_port 9887'
+        it_performs 'a successful run', '-mode searchhead -site site0 -master_uri https://192.168.0.10:8089 -replication_port 9887'
       end
     end
   end

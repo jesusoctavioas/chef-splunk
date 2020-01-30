@@ -37,7 +37,11 @@ class Chef
       action :update do
         splunk_service
         setup_app_dir
-        install(true)
+        if app_installed?
+          install(true)
+        else
+          install
+        end
         custom_app_configs
       end
 
@@ -53,6 +57,14 @@ class Chef
       end
 
       action :enable do
+        # delay in case an install was previously executed prior to enable, so
+        # splunk can catch up
+        5.times do |i|
+          break if app_installed?
+          ::Chef::Log.info "Waiting for Splunk App Install: retries #{4-i}/5 left"
+          sleep 30
+        end
+
         if app_enabled?
           ::Chef::Log.debug "#{new_resource.app_name} is enabled"
           return
@@ -167,8 +179,10 @@ class Chef
         dir = app_dir # this grants chef resources access to the private `#app_dir`
         command = if app_installed? && update == true
                     "#{splunk_cmd} install app #{dir} -update 1 -auth #{splunk_auth(new_resource.splunk_auth)}"
-                  elsif update == true
+                  elsif !app_installed? && update == false
                     "#{splunk_cmd} install app #{dir} -auth #{splunk_auth(new_resource.splunk_auth)}"
+                  else
+                    nil
                   end
         execute "splunk-install-#{new_resource.app_name}" do
           sensitive false
@@ -187,14 +201,19 @@ class Chef
 
       def app_enabled?
         s = shell_out("#{splunk_cmd} display app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}")
-        s.run_command
         s.exitstatus == 0 && s.stdout.split[2] == 'ENABLED'
       end
 
       def app_installed?
         s = shell_out("#{splunk_cmd} display app #{new_resource.app_name} -auth #{splunk_auth(new_resource.splunk_auth)}")
-        s.run_command
-        s.exitstatus == 0 && s.stdout.match?(/^#{new_resource.app_name}/)
+        return_val = s.exitstatus == 0 && s.stdout.match?(/^#{new_resource.app_name}/)
+
+        ::Chef::Log.debug s.stdout
+        ::Chef::Log.debug s.stderr
+        ::Chef::Log.debug s.exitstatus
+        ::Chef::Log.debug "return: #{return_val}"
+
+        return_val
       end
 
       def splunk_service
