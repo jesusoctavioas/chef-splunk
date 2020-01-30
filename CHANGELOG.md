@@ -8,12 +8,14 @@ This file is used to list changes made in each version of the splunk cookbook.
 - Uses the splunk CLI to add search head cluster members instead of the app server.conf file
   to ensure members are properly added. SH cluster members wait for the captain to converge.
 - Search Head Captains will initialize as a search head cluster member and then bootstrap themselves
-- Fixes issue [#139](https://github.com/chef-cookbooks/chef-splunk/issues/139)
-    - Add `cookbook` property to the template declared in the `splunk_app` provider
 - Fixes issue [#137](https://github.com/chef-cookbooks/chef-splunk/issues/137)
     - Adds logic to skip any initialization or bootstrapping of search head cluster resources.
+- Fixes issue [#139](https://github.com/chef-cookbooks/chef-splunk/issues/139)
+    - Add `cookbook` property to the template declared in the `splunk_app` provider
 - Fixes issue [#140](https://github.com/chef-cookbooks/chef-splunk/issues/140)
     - Adds back resource actions: :enable, :disable, :install, :remove
+- Fixes issue [#141](https://github.com/chef-cookbooks/chef-splunk/issues/141)
+    - `app_dir` property was added to the `splunk_app` resource
 - Integrates a search head cluster to a single or multisite indexer cluster
 - Adds helper method `#add_shcluster_member?` to indicate whether a search head cluster member needs to
   be added to the search head cluster
