@@ -118,6 +118,7 @@ describe 'chef-splunk::setup_clustering' do
           node.force_default['splunk']['mgmt_port'] = '8089'
           node.force_default['splunk']['clustering']['enabled'] = true
           node.force_default['splunk']['clustering']['mode'] = 'master'
+          node.force_default['splunk']['shclustering']['mgmt_uri'] = 'https://192.168.0.10:8089'
         end
         chef_run_init.create_node(cluster_master_node)
         chef_run_init.converge(described_recipe)
@@ -141,7 +142,7 @@ describe 'chef-splunk::setup_clustering' do
           chef_run_init.converge(described_recipe)
         end
 
-        it_performs 'a successful run', '-mode searchhead -master_uri https://192.168.0.10:8089 -replication_port 9887'
+        it_performs 'a successful run', '-mode searchhead -site site2 -master_uri https://192.168.0.10:8089 -replication_port 9887'
       end
     end
   end

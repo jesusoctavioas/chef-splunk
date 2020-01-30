@@ -21,27 +21,24 @@ describe 'chef-splunk::setup_shclustering' do
 
   context 'search head deployer' do
     let(:chef_run) do
-      ChefSpec::ServerRunner.new do |node|
+      ChefSpec::ServerRunner.new do |node, server|
         node.force_default['dev_mode'] = true
         node.force_default['splunk']['is_server'] = true
         node.force_default['splunk']['shclustering']['enabled'] = true
         node.force_default['splunk']['accept_license'] = true
         node.force_default['splunk']['shclustering']['mode'] = 'deployer'
+        create_data_bag_item(server, 'vault', 'splunk__default')
       end.converge(described_recipe)
     end
 
     before do
       allow_any_instance_of(Chef::Recipe).to receive(:chef_vault_item).and_return(vault_item)
     end
-
-    it_behaves_like 'common server.conf settings'
-    !it_behaves_like 'a search head cluster member'
-    !it_behaves_like 'a search head captain'
   end
 
   context 'search head cluster member settings' do
     let(:chef_run) do
-      ChefSpec::ServerRunner.new do |node|
+      ChefSpec::ServerRunner.new do |node, server|
         node.force_default['dev_mode'] = true
         node.force_default['splunk']['is_server'] = true
         node.force_default['splunk']['shclustering']['enabled'] = true
@@ -54,6 +51,7 @@ describe 'chef-splunk::setup_shclustering' do
           'https://shcluster-member02:8089',
           'https://shcluster-member03:8089',
         ]
+        create_data_bag_item(server, 'vault', 'splunk__default')
         allow_any_instance_of(::File).to receive(:exist?).and_call_original
         allow_any_instance_of(::File).to receive(:exist?)
           .with('/opt/splunk/etc/.setup_shcluster').and_return(false)
@@ -64,36 +62,37 @@ describe 'chef-splunk::setup_shclustering' do
       allow_any_instance_of(Chef::Recipe).to receive(:chef_vault_item).and_return(vault_item)
     end
 
-    !it_behaves_like 'common server.conf settings'
     it_behaves_like 'a search head cluster member'
-    !it_behaves_like 'a search head captain'
   end
 
   context 'search head captain' do
-    ChefSpec::ServerRunner.new do |node|
-      node.force_default['dev_mode'] = true
-      node.force_default['splunk']['is_server'] = true
-      node.force_default['splunk']['shclustering']['enabled'] = true
-      node.force_default['splunk']['accept_license'] = true
-      node.force_default['splunk']['shclustering']['deployer_url'] = "https://#{deployer_node['fqdn']}:8089"
-      node.force_default['splunk']['shclustering']['mgmt_uri'] = "https://#{node['fqdn']}:8089"
-      node.force_default['splunk']['shclustering']['mode'] = 'captain'
-      node.force_default['splunk']['shclustering']['shcluster_members'] = [
-        'https://shcluster-member01:8089',
-        'https://shcluster-member02:8089',
-        'https://shcluster-member03:8089',
-      ]
-      allow_any_instance_of(::File).to receive(:exist?).and_call_original
-      allow_any_instance_of(::File).to receive(:exist?)
-        .with('/opt/splunk/etc/.setup_shcluster').and_return(false)
-    end.converge(described_recipe)
+    let(:chef_run) do
+      ChefSpec::ServerRunner.new do |node, server|
+        node.force_default['dev_mode'] = true
+        node.force_default['splunk']['is_server'] = true
+        node.force_default['splunk']['shclustering']['enabled'] = true
+        node.force_default['splunk']['accept_license'] = true
+        node.force_default['splunk']['shclustering']['deployer_url'] = "https://#{deployer_node['fqdn']}:8089"
+        node.force_default['splunk']['shclustering']['mgmt_uri'] = "https://#{node['fqdn']}:8089"
+        node.force_default['splunk']['shclustering']['mode'] = 'captain'
+        node.force_default['splunk']['shclustering']['shcluster_members'] = [
+          'https://shcluster-member01:8089',
+          'https://shcluster-member02:8089',
+          'https://shcluster-member03:8089',
+        ]
+        create_data_bag_item(server, 'vault', 'splunk__default')
+        allow_any_instance_of(::File).to receive(:exist?).and_call_original
+        allow_any_instance_of(::File).to receive(:exist?)
+          .with('/opt/splunk/etc/.setup_shcluster').and_return(false)
+      end.converge(described_recipe)
+    end
 
     let(:shcluster_servers_list) do
       'https://shcluster-member01:8089,https://shcluster-member02:8089,https://shcluster-member03:8089'
     end
 
-    !it_behaves_like 'common server.conf settings'
-    !it_behaves_like 'a search head cluster member'
-    it_behaves_like 'a search head captain'
+    it 'executes bootstrap sh-captain command' do
+      expect(chef_run).to run_execute('bootstrap-shcluster-captain')
+    end
   end
 end

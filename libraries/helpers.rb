@@ -19,7 +19,8 @@
 # limitations under the License.
 #
 require 'socket'
-require 'mixlib/shellout'
+require 'chef/mixin/shell_out'
+include Chef::Mixin::ShellOut
 
 def splunk_installed?
   ::File.exist?(splunk_cmd)
@@ -113,7 +114,7 @@ def port_open?(port, ip = '127.0.0.1')
 end
 
 def current_mgmt_port(splunk_auth_info)
-  splunk = Mixlib::ShellOut.new("#{splunk_cmd} show splunkd-port -auth #{splunk_auth_info} | awk -F: '{print$NF}'")
+  splunk = shell_out("#{splunk_cmd} show splunkd-port -auth #{splunk_auth_info} | awk -F: '{print$NF}'")
   splunk.run_command
   splunk.error! # Raise an exception if it didn't exit with 0
   splunk.stdout.strip
@@ -125,7 +126,7 @@ def disabled?
 end
 
 def add_shcluster_member?(splunk_auth_info)
-  list_member_info = Mixlib::ShellOut.new("#{splunk_cmd} list shcluster-member-info -auth #{splunk_auth_info}")
+  list_member_info = shell_out("#{splunk_cmd} list shcluster-member-info -auth #{splunk_auth_info}")
   list_member_info.run_command
   list_member_info.error?
 end
@@ -148,7 +149,7 @@ end
 
 # returns true if the splunkd process is owned by the correct "run-as" user
 def correct_runas_user?
-  splunk = Mixlib::ShellOut.new("ps -ef|grep splunk|grep -v grep|awk '{print$1}'|uniq")
+  splunk = shell_out("ps -ef|grep splunk|grep -v grep|awk '{print$1}'|uniq")
   splunk.run_command
   splunk_runas_user == splunk.stdout
 end
@@ -162,7 +163,7 @@ def cluster_master?
 end
 
 def search_heads_peered?(splunk_auth_info)
-  list_search_server = Mixlib::ShellOut.new("/opt/splunk/bin/splunk list search-server -auth #{splunk_auth_info}")
+  list_search_server = shell_out("/opt/splunk/bin/splunk list search-server -auth #{splunk_auth_info}")
   list_search_server.run_command
   list_search_server.stdout.match?(/(^Server at URI \".*\" with status as \"Up\")+/)
 end
