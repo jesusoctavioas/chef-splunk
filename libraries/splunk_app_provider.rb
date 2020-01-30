@@ -37,7 +37,7 @@ class Chef
       action :update do
         splunk_service
         setup_app_dir
-        install(update=true)
+        install(true)
         custom_app_configs
       end
 
@@ -163,14 +163,12 @@ class Chef
         end
       end
 
-      def install(update=false)
+      def install(update = false)
         dir = app_dir # this grants chef resources access to the private `#app_dir`
         command = if app_installed? && update == true
                     "#{splunk_cmd} install app #{dir} -update 1 -auth #{splunk_auth(new_resource.splunk_auth)}"
                   elsif update == true
                     "#{splunk_cmd} install app #{dir} -auth #{splunk_auth(new_resource.splunk_auth)}"
-                  else
-                    nil
                   end
         execute "splunk-install-#{new_resource.app_name}" do
           sensitive false
