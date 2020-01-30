@@ -333,10 +333,55 @@ must be set explicitly elsewhere on the node(s).
 
 ## Custom Resources
 
+### splunk_app
+
+This resource will install a Splunk app or deployment app into the appropriate locations
+on a Splunk Enterprise server. Some custom "apps" simply install with a few files to override
+default Splunk settings. The latter is desirable for maintaining settings after an upgrade of the
+Splunk Enterprise server software.
+
+#### Actions
+* `:enable`: Enables a Splunk app after it has been disabled or newly installed
+* `:disable`: Disables a Splunk app and leaves it installed
+* `:install`: Installs a Splunk app or deployment app
+* `:update`: Updates a Splunk app that was previously installed
+* `:remove`: Completely removes a Splunk app or deployment app from the Splunk Enterprise server
+
+
+#### Examples
+
+Install and enable a deployment client configuration that overrides default Splunk Enterprise configurations
+
+- Given a wrapper cookbook called MyDeploymentClientBase with a folder structure as below:
+```
+MyDeploymentClientBase
+    /templates
+        /MyDeploymentClientBase
+            deploymentclient.conf.erb
+```
+
+```ruby
+splunk_auth_info = data_bag_item('vault', "splunk_#{node.chef_environment}")['auth']
+
+splunk_app 'MyDeploymentClientBase' do
+  splunk_auth splunk_auth_info
+  templates ['deploymentclient.conf.erb']
+  cookbook 'MyDeploymentClientBase'
+  action %i(install enable)
+end
+```
+
+The Splunk Enterprise server will have a filesystem created, as follows:
+```
+/opt/splunk/etc/apps/MyDeploymentClientBase/local/deploymentclient.conf
+```
+
+
+
 ### splunk_installer
 
 The Splunk Enterprise and Splunk Universal Forwarder package
-installation is the same save the name of the package and the URL to
+installation is the same, save for the name of the package and the URL to
 download. This custom resource abstracts the package installation to a
 common baseline. Any new platform installation support should be added
 by modifying the custom resource as appropriate. One goal of this
