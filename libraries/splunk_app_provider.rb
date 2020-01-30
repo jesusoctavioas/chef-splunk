@@ -28,87 +28,17 @@ class Chef
       provides :splunk_app
 
       action :install do
-        dir = app_dir # this grants chef resources access to the private `#app_dir`
-
-        if app_installed?
-          ::Chef::Log.debug "#{new_resource.app_name} is installed"
-          return
-        end
-
         splunk_service
-        install_dependencies unless new_resource.app_dependencies.empty?
-        if new_resource.cookbook_file
-          app_package = local_file(new_resource.cookbook_file)
-          cookbook_file app_package do
-            source new_resource.cookbook_file
-            cookbook new_resource.cookbook
-            checksum new_resource.checksum
-            owner splunk_runas_user
-            group splunk_runas_user
-            notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
-          end
-        elsif new_resource.remote_file
-          app_package = local_file(new_resource.remote_file)
-          remote_file app_package do
-            source new_resource.remote_file
-            checksum new_resource.checksum
-            owner splunk_runas_user
-            group splunk_runas_user
-            notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
-          end
-        elsif new_resource.remote_directory
-          remote_directory dir do
-            source new_resource.remote_directory
-            cookbook new_resource.cookbook
-            owner splunk_runas_user
-            group splunk_runas_user
-            files_owner splunk_runas_user
-            files_group splunk_runas_user
-            notifies :restart, 'service[splunk]'
-          end
-        else
-          raise "Could not find an installation source for splunk_app[#{new_resource.app_name}]"
-        end
+        setup_app_dir
+        install
+        custom_app_configs
+      end
 
-        execute "splunk-install-#{new_resource.app_name}" do
-          sensitive false
-          command "#{splunk_cmd} install app #{dir} -auth #{splunk_auth(new_resource.splunk_auth)}"
-        end
-
-        directory "#{dir}/local" do
-          recursive true
-          mode '755'
-          owner splunk_runas_user
-          group splunk_runas_user
-        end
-
-        if new_resource.templates.class == Hash
-          # create the templates with destination paths relative to the target app_dir
-          # Hash should be key/value where the key indicates a destination path (including file name),
-          # and value is the name of the template source
-          new_resource.templates.each do |destination, source|
-            template "#{dir}/#{destination}" do
-              source source
-              cookbook new_resource.cookbook
-              owner splunk_runas_user
-              group splunk_runas_user
-              mode '644'
-              notifies :restart, 'service[splunk]'
-            end
-          end
-        else
-          new_resource.templates.each do |t|
-            t = t.match?(/(\.erb)*/) ? ::File.basename(t, '.erb') : t
-            template "#{dir}/local/#{t}" do
-              source "#{new_resource.app_name}/#{t}.erb"
-              cookbook new_resource.cookbook
-              owner splunk_runas_user
-              group splunk_runas_user
-              mode '644'
-              notifies :restart, 'service[splunk]'
-            end
-          end
-        end
+      action :update do
+        splunk_service
+        setup_app_dir
+        install(update=true)
+        custom_app_configs
       end
 
       action :remove do
@@ -149,6 +79,106 @@ class Chef
 
       private
 
+      def setup_app_dir
+        dir = app_dir # this grants chef resources access to the private `#app_dir`
+
+        install_dependencies unless new_resource.app_dependencies.empty?
+        return if [new_resource.cookbook_file, new_resource.remote_file, new_resource.remote_directory].compact.empty?
+
+        if new_resource.cookbook_file
+          app_package = local_file(new_resource.cookbook_file)
+          cookbook_file app_package do
+            source new_resource.cookbook_file
+            cookbook new_resource.cookbook
+            checksum new_resource.checksum
+            owner splunk_runas_user
+            group splunk_runas_user
+            notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
+          end
+        elsif new_resource.remote_file
+          app_package = local_file(new_resource.remote_file)
+          remote_file app_package do
+            source new_resource.remote_file
+            checksum new_resource.checksum
+            owner splunk_runas_user
+            group splunk_runas_user
+            notifies :run, "execute[splunk-install-#{new_resource.app_name}]", :immediately
+          end
+        elsif new_resource.remote_directory
+          remote_directory dir do
+            source new_resource.remote_directory
+            cookbook new_resource.cookbook
+            owner splunk_runas_user
+            group splunk_runas_user
+            files_owner splunk_runas_user
+            files_group splunk_runas_user
+            notifies :restart, 'service[splunk]'
+          end
+        end
+      end
+
+      def custom_app_configs
+        dir = app_dir # this grants chef resources access to the private `#app_dir`
+
+        if new_resource.templates.class == Hash
+          # create the templates with destination paths relative to the target app_dir
+          # Hash should be key/value where the key indicates a destination path (including file name),
+          # and value is the name of the template source
+          new_resource.templates.each do |destination, source|
+            directory "#{dir}/#{destination}" do
+              recursive true
+              mode '755'
+              owner splunk_runas_user
+              group splunk_runas_user
+            end
+
+            template "#{dir}/#{destination}" do
+              source source
+              cookbook new_resource.cookbook
+              owner splunk_runas_user
+              group splunk_runas_user
+              mode '644'
+              notifies :restart, 'service[splunk]'
+            end
+          end
+        else
+          directory "#{dir}/local" do
+            recursive true
+            mode '755'
+            owner splunk_runas_user
+            group splunk_runas_user
+          end
+
+          new_resource.templates.each do |t|
+            t = t.match?(/(\.erb)*/) ? ::File.basename(t, '.erb') : t
+            template "#{dir}/local/#{t}" do
+              source "#{new_resource.app_name}/#{t}.erb"
+              cookbook new_resource.cookbook
+              owner splunk_runas_user
+              group splunk_runas_user
+              mode '644'
+              notifies :restart, 'service[splunk]'
+            end
+          end
+        end
+      end
+
+      def install(update=false)
+        dir = app_dir # this grants chef resources access to the private `#app_dir`
+        command = if app_installed? && update == true
+                    "#{splunk_cmd} install app #{dir} -update 1 -auth #{splunk_auth(new_resource.splunk_auth)}"
+                  elsif update == true
+                    "#{splunk_cmd} install app #{dir} -auth #{splunk_auth(new_resource.splunk_auth)}"
+                  else
+                    nil
+                  end
+        execute "splunk-install-#{new_resource.app_name}" do
+          sensitive false
+          command command
+          not_if { command.nil? }
+        end
+      end
+
       def app_dir
         new_resource.app_dir || "#{splunk_dir}/etc/apps/#{new_resource.app_name}"
       end
@@ -170,10 +200,17 @@ class Chef
       end
 
       def splunk_service
-        service 'splunk' do
-          action :nothing
+        # during an initial install, the start/restart commands must deal with accepting
+        # the license. So, we must ensure the service[splunk] resource
+        # properly deals with the license.
+        edit_resource(:service, 'splunk') do
+          action node['init_package'] == 'systemd' ? %i(start enable) : :start
           supports status: true, restart: true
-          provider Chef::Provider::Service::Init
+          stop_command svc_command('stop')
+          start_command svc_command('start')
+          restart_command svc_command('restart')
+          status_command svc_command('status')
+          provider splunk_service_provider
         end
       end
 
