@@ -38,6 +38,11 @@ class Chef
       attribute :splunk_auth, kind_of: [String, Array], required: true
       attribute :app_dependencies, kind_of: Array, default: []
       attribute :templates, kind_of: [Array, Hash], default: []
+
+      # template_variables is a Hash referencing
+      # each template named in the templates property, above, with each template having its
+      # unique set of variables and values
+      attribute :template_variables, kind_of: Hash, default: { 'default' => {} }
       attribute :enabled, kind_of: [TrueClass, FalseClass, NilClass], default: false
       attribute :installed, kind_of: [TrueClass, FalseClass, NilClass], default: false
     end

@@ -61,7 +61,7 @@ class Chef
         # splunk can catch up
         5.times do |i|
           break if app_installed?
-          ::Chef::Log.info "Waiting for Splunk App Install: retries #{4-i}/5 left"
+          ::Chef::Log.info "Waiting for Splunk App Install: retries #{4 - i}/5 left"
           sleep 30
         end
 
@@ -137,7 +137,7 @@ class Chef
           # Hash should be key/value where the key indicates a destination path (including file name),
           # and value is the name of the template source
           new_resource.templates.each do |destination, source|
-            directory "#{dir}/#{destination}" do
+            directory "#{dir}/#{::File.dirname(destination)}" do
               recursive true
               mode '755'
               owner splunk_runas_user
@@ -147,6 +147,7 @@ class Chef
             template "#{dir}/#{destination}" do
               source source
               cookbook new_resource.cookbook
+              variables new_resource.template_variables['default']
               owner splunk_runas_user
               group splunk_runas_user
               mode '644'
@@ -162,10 +163,17 @@ class Chef
           end
 
           new_resource.templates.each do |t|
+            template_variables = if new_resource.template_variables.key?(t)
+                                   new_resource.template_variables[t]
+                                 else
+                                   new_resource.template_variables['default']
+                                 end
             t = t.match?(/(\.erb)*/) ? ::File.basename(t, '.erb') : t
+
             template "#{dir}/local/#{t}" do
               source "#{new_resource.app_name}/#{t}.erb"
               cookbook new_resource.cookbook
+              variables template_variables
               owner splunk_runas_user
               group splunk_runas_user
               mode '644'
@@ -181,8 +189,6 @@ class Chef
                     "#{splunk_cmd} install app #{dir} -update 1 -auth #{splunk_auth(new_resource.splunk_auth)}"
                   elsif !app_installed? && update == false
                     "#{splunk_cmd} install app #{dir} -auth #{splunk_auth(new_resource.splunk_auth)}"
-                  else
-                    nil
                   end
         execute "splunk-install-#{new_resource.app_name}" do
           sensitive false

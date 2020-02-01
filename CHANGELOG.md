@@ -10,8 +10,10 @@ This file is used to list changes made in each version of the splunk cookbook.
 - Search Head Captains will initialize as a search head cluster member and then bootstrap themselves
 - Fixes issue [#137](https://github.com/chef-cookbooks/chef-splunk/issues/137)
     - Adds logic to skip any initialization or bootstrapping of search head cluster resources.
+- Fixes issue [#138](https://github.com/chef-cookbooks/chef-splunk/issues/138)
+    - Adds a new property to the `splunk_app` resource, called `template_variables`
 - Fixes issue [#139](https://github.com/chef-cookbooks/chef-splunk/issues/139)
-    - Add `cookbook` property to the template declared in the `splunk_app` provider
+    - Adds `cookbook` property to the template declared in the `splunk_app` provider
 - Fixes issue [#140](https://github.com/chef-cookbooks/chef-splunk/issues/140)
     - Adds back resource actions: :enable, :disable, :install, :remove
 - Fixes issue [#141](https://github.com/chef-cookbooks/chef-splunk/issues/141)
