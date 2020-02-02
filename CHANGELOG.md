@@ -8,6 +8,7 @@ This file is used to list changes made in each version of the splunk cookbook.
 - Uses the splunk CLI to add search head cluster members instead of the app server.conf file
   to ensure members are properly added. SH cluster members wait for the captain to converge.
 - Search Head Captains will initialize as a search head cluster member and then bootstrap themselves
+- Improves idempotent addition of search head cluster members
 - Fixes issue [#137](https://github.com/chef-cookbooks/chef-splunk/issues/137)
     - Adds logic to skip any initialization or bootstrapping of search head cluster resources.
 - Fixes issue [#138](https://github.com/chef-cookbooks/chef-splunk/issues/138)

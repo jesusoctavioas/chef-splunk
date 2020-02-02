@@ -125,12 +125,6 @@ def disabled?
     node['splunk']['disabled'] == true
 end
 
-def add_shcluster_member?(splunk_auth_info)
-  list_member_info = shell_out("#{splunk_cmd} list shcluster-member-info -auth #{splunk_auth_info}")
-  list_member_info.run_command
-  list_member_info.error?
-end
-
 def setup_auth?
   node['splunk']['setup_auth'] == true
 end
@@ -162,8 +156,24 @@ def cluster_master?
   node['splunk']['clustering']['mode'] == 'master'
 end
 
+def init_shcluster_member?(splunk_auth_info)
+  list_member_info = shell_out("#{splunk_cmd} list shcluster-member-info -auth #{splunk_auth_info}")
+  list_member_info.run_command
+  list_member_info.error?
+end
+
+def shcluster_members_ipv4(splunk_auth_info)
+  splunk = shell_out("#{splunk_cmd} list shcluster-members -auth #{splunk_auth_info} | grep host_port_pair | awk -F: '{print$2}'")
+  splunk.stdout.split
+end
+
+def shcaptain_elected?(splunk_auth_info)
+  splunk = shell_out("#{splunk_cmd} list shcluster-members -auth #{splunk_auth_info} | grep is_captain:1")
+  splunk.exitstatus == 0
+end
+
 def search_heads_peered?(splunk_auth_info)
-  list_search_server = shell_out("/opt/splunk/bin/splunk list search-server -auth #{splunk_auth_info}")
+  list_search_server = shell_out("#{splunk_cmd} list search-server -auth #{splunk_auth_info}")
   list_search_server.run_command
   list_search_server.stdout.match?(/(^Server at URI \".*\" with status as \"Up\")+/)
 end

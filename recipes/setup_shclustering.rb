@@ -148,8 +148,7 @@ execute 'initialize search head cluster member' do
     "-secret #{shcluster_secret} " \
     "-shcluster_label #{node['splunk']['shclustering']['label']}"
   notifies :restart, 'service[splunk]', :immediately
-  only_if { add_shcluster_member?(splunk_auth_info) }
-  not_if { ::File.exist?("#{splunk_dir}/etc/.setup_shcluster") }
+  only_if { init_shcluster_member?(splunk_auth_info) }
 end
 
 if shcluster_servers_list.size >= 2 && node['splunk']['shclustering']['mode'] == 'captain'
@@ -158,9 +157,9 @@ if shcluster_servers_list.size >= 2 && node['splunk']['shclustering']['mode'] ==
     command "#{splunk_cmd} bootstrap shcluster-captain -auth '#{splunk_auth_info}' " \
       "-servers_list \"#{shcluster_servers_list.join(',')}\""
     notifies :restart, 'service[splunk]', :immediately
-    not_if { ::File.exist?("#{splunk_dir}/etc/.setup_shcluster") }
+    not_if { shcaptain_elected?(splunk_auth_info) }
   end
-elsif !::File.exist?("#{splunk_dir}/etc/.setup_shcluster")
+elsif shcaptain_elected?(splunk_auth_info) && !shcluster_members_ipv4(splunk_auth_info).include?(node['ipaddress'])
   captain_mgmt_uri = nil
   search(
     :node,
@@ -175,21 +174,9 @@ elsif !::File.exist?("#{splunk_dir}/etc/.setup_shcluster")
   execute 'add member to search head cluster' do
     sensitive true
     command "#{splunk_cmd} add shcluster-member -current_member_uri #{captain_mgmt_uri} -auth '#{splunk_auth_info}'"
-    only_if { node['splunk']['shclustering']['mode'] == 'member' && add_shcluster_member?(splunk_auth_info) }
-    not_if { ::File.exist?("#{splunk_dir}/etc/.setup_shcluster") }
+    only_if { node['splunk']['shclustering']['mode'] == 'member' }
     notifies :restart, 'service[splunk]'
   end
-end
-
-file "#{splunk_dir}/etc/.setup_shcluster" do
-  action :nothing
-  content "#{node['splunk']['shclustering']['mode']}\n#{shcluster_servers_list.join(',')}\n"
-  subscribes :create, 'execute[bootstrap-shcluster-captain]'
-  subscribes :create, 'execute[add member to search head cluster]'
-  owner splunk_runas_user
-  group splunk_runas_user
-  mode '600'
-  not_if { add_shcluster_member?(splunk_auth_info) }
 end
 
 cluster_master = { 'mgmt_uri' => nil, 'num_sites' => 1, 'site' => nil }
