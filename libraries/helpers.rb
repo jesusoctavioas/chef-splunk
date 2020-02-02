@@ -174,6 +174,5 @@ end
 
 def search_heads_peered?(splunk_auth_info)
   list_search_server = shell_out("#{splunk_cmd} list search-server -auth #{splunk_auth_info}")
-  list_search_server.run_command
   list_search_server.stdout.match?(/(^Server at URI \".*\" with status as \"Up\")+/)
 end

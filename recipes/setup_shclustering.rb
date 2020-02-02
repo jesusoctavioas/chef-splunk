@@ -197,9 +197,9 @@ search(
   cluster_master['num_sites'] = result['cluster_num_sites']
 end
 
-shpeer_integration_command = "#{splunk_cmd} edit cluster-config -mode searchhead -site site0 -master_uri #{cluster_master['mgmt_uri']} " \
-                             "-secret #{shcluster_secret}"
-shpeer_integration_command += " -site #{cluster_master['site']}" if cluster_master['num_sites'] > 1
+shpeer_integration_command = "#{splunk_cmd} edit cluster-config -mode searchhead -master_uri #{cluster_master['mgmt_uri']} " \
+                             "-secret #{shcluster_secret} -auth #{splunk_auth_info}"
+shpeer_integration_command += " -site site0" if cluster_master['num_sites'] > 1
 
 execute 'search head cluster integration with indexer cluster' do
   sensitive true
